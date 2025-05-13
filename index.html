@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REYNIER Eoghan | Portfolio Réseaux & Télécom</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <svg style="display: none;">
+    <symbol id="icon-code" viewBox="0 0 24 24"><path d="M8.7 16.3L7.3 14.9 11.6 10.6 7.3 6.3 8.7 4.9 14.4 10.6 8.7 16.3Z"/></symbol>
+    <symbol id="icon-network" viewBox="0 0 24 24"><path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4m0 6a6 6 0 0 1 6 6h3a1 1 0 0 1 0 2h-3a6 6 0 0 1-6 6 6 6 0 0 1-6-6H3a1 1 0 0 1 0-2h3a6 6 0 0 1 6-6Z"/></symbol>
+    <symbol id="icon-virtual" viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></symbol>
+    <symbol id="icon-os" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1-10 10A10.012 10.012 0 0 1 12 2Z"/></symbol>
+    <symbol id="icon-office" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h12v2H3z"/></symbol>
+    <symbol id="icon-radio" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 4 4 4 4 0 0 0-4-4Zm0-10a10 10 0 0 0 0 20V2Z"/></symbol>
+  </svg>
+
+  <nav class="navbar">
+    <h1 class="logo">Eoghan REYNIER Portfolio</h1>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#about">À propos</a></li>
+      <li><a href="#skills">Compétences</a></li>
+      <li><a href="#projects">Projets</a></li>
+      <li><a href="#experience">Expérience</a></li>
+      <li><a href="#education">Formations</a></li>
+      <li><a href="#contact">CV / Contact</a></li>
+    </ul>
+    <button class="burger" onclick="toggleMenu()">☰</button>
+  </nav>
+
+  <section id="about" class="section">
+    <h2>À propos de moi</h2>
+    <img src="assets/images/photo.jpg" alt="Photo pro" class="profile-pic"/>
+    <p><strong>REYNIER Eoghan</strong> – Étudiant en 1ᵉ année de BUT Réseaux & Télécommunications à l'IUT d'Annecy. Passionné par les systèmes d'information, la cybersécurité et la conception de réseaux robustes.</p>
+    <p>🎯 Je recherche un stage de 2ème année dans le domaine des infrastructures réseau ou de la sécurité des systèmes.</p>
+  </section>
+
+  <section id="skills" class="section">
+    <h2>Compétences</h2>
+    <div class="skills-grid">
+      <div><h3><svg><use href="#icon-code"/></svg> Programmation</h3><ul><li>Python, HTML, CSS, JavaScript (bases)</li><li>PHP, SQL</li></ul></div>
+      <div><h3><svg><use href="#icon-network"/></svg> Systèmes & Réseaux</h3><ul><li>DHCP, DNS, File Server, Active Directory</li><li>CCNA1, Wireshark</li></ul></div>
+      <div><h3><svg><use href="#icon-virtual"/></svg> Virtualisation</h3><ul><li>VirtualBox, VMware, EVE-NG</li></ul></div>
+      <div><h3><svg><use href="#icon-os"/></svg> Systèmes d’exploitation</h3><ul><li>Windows</li><li>Linux (Ubuntu, Debian)</li></ul></div>
+      <div><h3><svg><use href="#icon-office"/></svg> Bureautique</h3><ul><li>Maîtrise de Word, Excel, PowerPoint</li></ul></div>
+      <div><h3><svg><use href="#icon-radio"/></svg> Télécommunication</h3><ul><li>Bases de Matlab</li><li>Analyse de spectre, compréhension radio</li></ul></div>
+    </div>
+  </section>
+
+  <section id="projects" class="section">
+    <h2>Projets</h2>
+    <div class="project-card">
+      <h3>Configuration VLANs & ACL Cisco</h3>
+      <p><strong>Contexte :</strong> Projet de TP / IUT</p>
+      <p><strong>Objectif :</strong> Isoler plusieurs départements réseau avec VLANs, DHCP, NAT et sécurisation via ACLs.</p>
+      <p><strong>Technos :</strong> Cisco CLI, Packet Tracer</p>
+      <p><strong>Réalisation :</strong> Routage inter-VLAN, serveur DHCP, NAT statique/dynamique, ACLs de filtrage, tests de connectivité</p>
+      <img src="assets/images/vlan-topology.png" alt="VLAN Topology">
+    </div>
+    <div class="project-card">
+      <h3>Serveur DNS + Routage Statique Debian</h3>
+      <p><strong>Contexte :</strong> Projet personnel</p>
+      <p><strong>Objectif :</strong> Mettre en place un serveur DNS BIND9 avec routage multi-interface</p>
+      <p><strong>Technos :</strong> Linux Debian, BIND9, ip route</p>
+      <p><strong>Réalisation :</strong> Configuration BIND, zones directes/inverses, scripts de démarrage, routage IPv4/IPv6</p>
+      <img src="assets/images/dns-setup.png" alt="DNS Setup">
+    </div>
+    <div class="project-card">
+      <h3>Simulation réseau OSPF avec failover</h3>
+      <p><strong>Contexte :</strong> TP avancé</p>
+      <p><strong>Objectif :</strong> Simuler un réseau multi-sites avec redondance de route</p>
+      <p><strong>Technos :</strong> GNS3, Cisco IOS</p>
+      <p><strong>Réalisation :</strong> OSPF multi-area, HSRP, test de basculement avec coupure de lien</p>
+      <img src="assets/images/ospf-gns3.png" alt="OSPF Simulation">
+    </div>
+  </section>
+
+  <section id="experience" class="section">
+    <h2>Expérience professionnelle</h2>
+    <p><strong>Orange (Stage)</strong> – 2021 </p>
+    <ul>
+      <li>Assistance à la configuration d’équipements réseau</li>
+      <li>Analyse de trafic avec Wireshark</li>
+      <li>Documentation des architectures LAN & WAN</li>
+    </ul>
+  </section>
+
+  <section id="education" class="section">
+    <h2>Formations & Certifications</h2>
+    <ul>
+      <li>BUT Réseaux & Télécoms – IUT Annecy (2023–2027)</li>
+      <li>Certification Cisco CCNA (en cours)</li>
+      <li>Certification Stormshield</li>
+      <li>Certification MOOC de l'ANSSI</li>
+    </ul>
+  </section>
+
+  <section id="contact" class="section">
+    <h2>Contact & CV</h2>
+    <a href="assets/CV_REYNIER_Eoghan.pdf" class="btn" download>Télécharger mon CV</a>
+    <p>📧 Email : <a href="mailto:eoghanreynier@gmail.com">eoghanreynier@gmail.com</a></p>
+    <p>🔗 <a href="https://www.linkedin.com/in/eoghan-reynier-53640a236/">LinkedIn</a> | <a href="#">GitHub</a></p>
+  </section>
+
+  <footer>
+    <p>&copy; 2025 REYNIER Eoghan – Portfolio Réseaux & Télécom</p>
+  </footer>
+
+  <script>
+    function toggleMenu() {
+      const navLinks = document.getElementById('navLinks');
+      navLinks.classList.toggle('show');
+    }
+  </script>
+</body>
+</html>

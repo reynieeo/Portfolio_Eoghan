@@ -201,4 +201,13 @@ footer {
   .burger {
     display: block;
   }
+
+}
+.project-image {
+  width: 100%;
+  max-width: 700px;
+  margin: 1rem auto;
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }

@@ -800,3 +800,11 @@ footer p {
     grid-template-columns: 1fr;
   }
 }
+a {
+  text-decoration: none; /* Retirer le soulignement par défaut */
+  color: #9a4baf; /* Garder la couleur du lien que vous avez */
+}
+
+a:hover {
+  text-decoration: underline; /* Souligner le lien au survol */
+}

@@ -808,3 +808,20 @@ a {
 a:hover {
   text-decoration: underline; /* Souligner le lien au survol */
 }
+.contact-icon {
+  width: 40px; /* Taille du cadran */
+  height: 40px; /* Taille du cadran */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%; /* Bord arrondi pour faire un cercle */
+  background-color: #0077b5; /* Couleur de fond (bleu LinkedIn) */
+  padding: 8px;
+  overflow: hidden; /* Assure que l'image ne déborde pas du cadran */
+}
+
+.contact-icon img {
+  width: 100%; /* L'image prend toute la largeur du cadran */
+  height: 100%; /* L'image prend toute la hauteur du cadran */
+  object-fit: contain; /* Assure que l'image est bien contenue dans le cercle */
+}

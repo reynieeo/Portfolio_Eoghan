@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REYNIER Eoghan | Portfolio Réseaux & Télécom</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-animation"></div>
+
+  <nav id="navbar">
+    <div class="logo">Eoghan REYNIER</div>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#about">À propos</a></li>
+      <li><a href="#skills">Compétences</a></li>
+      <li><a href="#projects">Projets</a></li>
+      <li><a href="#education">Formations</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <button class="burger" onclick="toggleMenu()">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">ÉTUDIANT EN RÉSEAUX & TÉLÉCOMS</div>
+      <h1>Eoghan REYNIER</h1>
+      <p>Passionné par la cybersécurité et les infrastructures réseaux et sytèmes . À la recherche d'un stage et d'une alternance pour approfondir mes compétences.</p>
+      <div class="hero-cta">
+        <a href="#contact" class="btn btn-primary">Me contacter</a>
+        <a href="assets/cv REYNIER Eoghan rendu.pdf" class="btn btn-secondary" download>Télécharger mon CV</a>
+      </div>
+    </div>
+    <div class="scroll-indicator"></div>
+  </section>
+
+  <section id="about">
+    <div class="section-header">
+      <span class="section-tag">Qui suis-je</span>
+      <h2 class="section-title">À propos de moi</h2>
+      <p class="section-subtitle">Étudiant en 2ème année de BUT Réseaux & Télécommunications à l'IUT d'Annecy</p>
+    </div>
+    <div class="about-grid">
+      <div class="about-image">
+        <img src="assets/photo.pdf" alt="Eoghan REYNIER" class="profile-pic">
+      </div>
+      <div class="about-content">
+        <h3>Passionné par les technologies réseau</h3>
+        <p>Je suis actuellement en 2ème année de BUT Réseaux & Télécommunications à l'IUT d'Annecy. Mon parcours m'a permis de développer des compétences solides en administration système, configuration réseau et cybersécurité.</p>
+        <p>Je recherche activement un stage de 2ème année et une alternance pour la 3 ème année dans le domaine des infrastructures réseau ou de la sécurité des systèmes pour mettre en pratique mes connaissances et continuer à apprendre.</p>
+        <div class="stats">
+          <div class="stat-item">
+            <div class="stat-number">2+</div>
+            <div class="stat-label">Années d'études</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">10+</div>
+            <div class="stat-label">Projets réalisés</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">4</div>
+            <div class="stat-label">Certifications</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="skills">
+    <div class="section-header">
+      <span class="section-tag">Expertise</span>
+      <h2 class="section-title">Compétences techniques</h2>
+      <p class="section-subtitle">Un éventail de compétences acquises tout au long de ma formation</p>
+    </div>
+    <div class="skills-grid">
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M8.7 16.3L7.3 14.9 11.6 10.6 7.3 6.3 8.7 4.9 14.4 10.6 8.7 16.3Z"/></svg>
+        </div>
+        <h3>Programmation</h3>
+        <ul>
+          <li>Python pour l'automatisation</li>
+          <li>HTML, CSS, JavaScript</li>
+          <li>PHP & SQL pour le web</li>
+        </ul>
+      </div>
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 1 1-4 4 4 4 0 0 1 4-4m0 6a6 6 0 0 1 6 6h3a1 1 0 0 1 0 2h-3a6 6 0 0 1-6 6 6 6 0 0 1-6-6H3a1 1 0 0 1 0-2h3a6 6 0 0 1 6-6Z"/></svg>
+        </div>
+        <h3>Systèmes & Réseaux</h3>
+        <ul>
+          <li>DHCP, DNS, File Server</li>
+          <li>Active Directory</li>
+          <li>CCNA1 et CCNA2</li>
+          <li>Certification Stormshield</li>
+        </ul>
+      </div>
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z"/></svg>
+        </div>
+        <h3>Virtualisation</h3>
+        <ul>
+          <li>VirtualBox</li>
+          <li>VMware</li>
+          <li>EVE-NG pour simulations</li>
+        </ul>
+      </div>
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1-10 10A10.012 10.012 0 0 1 12 2Z"/></svg>
+        </div>
+        <h3>Systèmes d'exploitation</h3>
+        <ul>
+          <li>Windows Server</li>
+          <li>Linux Ubuntu</li>
+          <li>Debian</li>
+        </ul>
+      </div>
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h12v2H3z"/></svg>
+        </div>
+        <h3>Cybersecurité</h3>
+        <ul>
+          <li>Initiation au pentest</li>
+          <li>Active Directory (GOAD – Game of Active Directory)</li>
+          <li>Analyse de vulnérabilités</li>
+          <li>Veille en cybersécurité / CTF</li>
+        </ul>
+      </div>
+      <div class="skill-card">
+        <div class="skill-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 4 4 4 4 0 0 0-4-4Zm0-10a10 10 0 0 0 0 20V2Z"/></svg>
+        </div>
+        <h3>Télécommunication</h3>
+        <ul>
+          <li>Bases de Matlab</li>
+          <li>Analyse de spectre</li>
+          <li>Compréhension radio</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="projects">
+    <div class="section-header">
+      <span class="section-tag">Réalisations</span>
+      <h2 class="section-title">Mes projets</h2>
+      <p class="section-subtitle">Une sélection de mes travaux académiques et personnels</p>
+    </div>
+    <div class="projects-grid">
+      <div class="project-card">
+        <div class="project-image-wrapper">
+          <img src="assets/images/vlan-topology.png" alt="VLAN Topology" class="project-image">
+        </div>
+        <div class="project-content">
+          <span class="project-tag">TP / IUT</span>
+          <h3>Configuration VLANs & ACL Cisco</h3>
+          <div class="project-meta">
+            <div class="project-meta-item">
+              <span class="project-meta-label">Objectif</span>
+              <span class="project-meta-value">Isoler les réseaux</span>
+            </div>
+          </div>
+          <p>Projet de configuration avancée de réseaux avec segmentation VLAN, mise en place de serveurs DHCP, NAT statique/dynamique et sécurisation complète via ACLs. Tests de connectivité et validation de l'architecture.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">Cisco CLI</span>
+            <span class="tech-tag">Packet Tracer</span>
+            <span class="tech-tag">VLAN</span>
+            <span class="tech-tag">ACL</span>
+            <span class="tech-tag">DHCP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-content">
+          <span class="project-tag">SAE-309 | Projet individuel</span>
+          <h3>Projet PWA — Application web progressive</h3>
+          <div class="project-meta">
+            <div class="project-meta-item">
+              <span class="project-meta-label">Contexte</span>
+              <span class="project-meta-value">BUT Réseaux & Télécommunications</span>
+            </div>
+          </div>
+          <p>Développement d’une application web progressive (PWA) simulant un environnement de travail informatique.
+L’application intègre un éditeur Python, plusieurs terminaux simulés (Python, Linux, Windows) ainsi que l’utilisation d’API externes, dont une intelligence artificielle intégrée pour assister l’utilisateur dans l’écriture et la compréhension du code.
+
+Les données sont conservées via le localStorage et un service worker permet le fonctionnement hors ligne.
+Ce projet m’a permis d’approfondir la conception d’une PWA, la gestion du cache, le stockage local et l’intégration d’API externes.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">HTML / CSS</span>
+            <span class="tech-tag">JavaScript</span>
+            <span class="tech-tag">PWA</span>
+            <span class="tech-tag">Service Worker</span>
+            <span class="tech-tag">localStorage</span>
+          </div>
+        </div>
+        <div class="project-image-wrapper">
+          <img src="assets/images/pwa.png" alt="DNS Setup" class="project-image">
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-image-wrapper">
+          <img src="assets/B.png" alt="Application web de location" class="project-image">
+        </div>
+        <div class="project-content">
+          <span class="project-tag">SAE 203 - Projet de groupe</span>
+          <h3>Application web de location de voitures</h3>
+          <div class="project-meta">
+            <div class="project-meta-item">
+              <span class="project-meta-label">Contexte</span>
+              <span class="project-meta-value">BUT R&T</span>
+            </div>
+          </div>
+          <p>Conception complète d'une application web dynamique de gestion de location de voitures. Modélisation de base de données relationnelle, développement des fonctionnalités CRUD, système de filtrage avancé et interface d'administration.</p>
+          <div class="tech-tags">
+            <span class="tech-tag">PHP</span>
+            <span class="tech-tag">MySQL</span>
+            <span class="tech-tag">HTML/CSS</span>
+            <span class="tech-tag">CRUD</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="education">
+    <div class="section-header">
+      <span class="section-tag">Formation</span>
+      <h2 class="section-title">Formations & Certifications</h2>
+    </div>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-content">
+          <h3 class="timeline-title">BUT Réseaux & Télécommunications</h3>
+          <p class="timeline-date">IUT Annecy | 2024 - 2027</p>
+          <ul>
+            <li>Administration système et réseau</li>
+            <li>Cybersecurité</li>
+            <li>Sécurité des systèmes d'information</li>
+            <li>Télécommunications et traitement du signal</li>
+          </ul>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-content">
+          <h3 class="timeline-title">Certifications professionnelles</h3>
+          <p class="timeline-date">Certifications obtenues et en cours</p>
+          <ul>
+            <li>Certification Cisco CCNA1</li>
+            <li>Certification Cisco CCNA2 (en cours)</li>
+            <li>Certification Stormshield (en cours)</li>
+            <li>Certification MOOC de l'ANSSI</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="section-header">
+      <span class="section-tag">Contact</span>
+      <h2 class="section-title">Restons en contact</h2>
+      <p class="section-subtitle">N'hésitez pas à me contacter pour toute opportunité de stage ou alternance</p>
+    </div>
+    <div class="contact-grid">
+      <div class="contact-info">
+        <div class="contact-item">
+          <div class="contact-icon">📧</div>
+          <div class="contact-details">
+            <h4>Email</h4>
+            <a href="mailto:eoghanreynier@gmail.com">eoghanreynier@gmail.com</a>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-icon">💼</div>
+          <div class="contact-details">
+            <h4>LinkedIn</h4>
+            <a href="https://www.linkedin.com/in/eoghan-reynier-53640a236/" target="_blank">Eoghan REYNIER</a>
+          </div>
+        </div>
+      </div>
+      <div class="contact-cta">
+        <h3>Télécharger mon CV</h3>
+        <p>Retrouvez l'intégralité de mon parcours et de mes compétences</p>
+        <a href="assets/cv REYNIER Eoghan rendu.pdf" class="btn btn-primary" download>Télécharger le CV (PDF)</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>&copy; 2025 Eoghan REYNIER - Portfolio Réseaux & Télécommunications</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
+
+
+
+

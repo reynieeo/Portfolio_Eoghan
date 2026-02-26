@@ -1,0 +1,1685 @@
+// main.js
+// Point d'entrée principal de l'application RTermLab
+// On importe les fonctions Python depuis un autre module
+import { initPython, runPythonLine, runPythonScript } from "./terminals/python.js";
+
+// ============================================================================
+// CONSTANTES GLOBALES
+// ============================================================================
+
+// Clé pour sauvegarder l'historique des commandes Python dans localStorage
+const PY_HISTORY_KEY = "RTERMLAB_PY_HISTORY_V1";
+
+// Nombre max de commandes gardées en historique (pour pas surcharger le stockage)
+const PY_HISTORY_MAX = 200;
+
+// Clé pour sauvegarder les scripts utilisateur dans localStorage
+const STORAGE_KEY_SCRIPTS = "RTLAB_SCRIPTS";
+
+// Clé pour stocker la clé API OpenRouter (pour l'IA)
+const AI_KEY_STORAGE = "RTERMLAB_OR_KEY_V1";
+
+// URL de l'API OpenRouter pour générer du code avec l'IA
+const OR_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+
+// ============================================================================
+// VARIABLES GLOBALES
+// ============================================================================
+
+// Handle pour un éventuel fichier Python ouvert (pas utilisé pour l'instant)
+let PY_FILE_HANDLE = null;
+
+// Mode actuel de l'application (ici toujours "python")
+let currentMode = "python";
+
+// Référence vers l'objet Terminal (xterm.js) - c'est la console affichée
+let term = null;
+
+// Contient ce que l'utilisateur tape en ce moment dans le terminal
+let currentLine = "";
+
+// Tableau contenant l'historique des commandes Python tapées
+let PY_HISTORY = [];
+
+// Index actuel dans l'historique (pour naviguer avec flèches haut/bas)
+let PY_HISTORY_INDEX = 0;
+
+// Fonction de résolution pour la Promise de input() Python
+// Quand l'utilisateur appuie sur Entrée pendant un input(), on résout la Promise
+let PY_INPUT_RESOLVE = null;
+
+// Booléen qui indique si on est en train d'attendre un input() Python
+let PY_INPUT_ACTIVE = false;
+
+// Buffer temporaire pour stocker ce que l'utilisateur tape pendant input()
+let PY_INPUT_BUFFER = "";
+
+// ============================================================================
+// ÉVÉNEMENTS FENÊTRE
+// ============================================================================
+
+// Quand la page est chargée, on lance l'initialisation
+window.addEventListener("load", onWindowLoad);
+
+// Quand on redimensionne la fenêtre, on adapte le terminal
+window.addEventListener("resize", onResize);
+
+/******************************************************************************/
+// Service Worker - Pour le mode PWA (Progressive Web App)
+/******************************************************************************/
+
+async function registerServiceWorker()
+{
+	// Vérifie si le navigateur supporte les Service Workers
+	if("serviceWorker" in navigator)
+	{
+		try
+		{
+			// Enregistre le fichier sw.js comme service worker
+			// Ça permet de mettre en cache l'app et de l'utiliser hors-ligne
+			await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+		}
+		catch(error)
+		{
+			// Si ça échoue, on log l'erreur mais l'app continue de marcher
+			console.error("Service Worker registration failed:", error);
+		}
+	}
+}
+
+// ============================================================================
+// FONCTIONS UTILITAIRES
+// ============================================================================
+
+function IS_WHITE_SPACE(ch)
+{
+	// Vérifie si un caractère est un espace blanc (espace, tab, retour ligne)
+	// Utilisé par SIMPLE_TRIM pour nettoyer les chaînes
+	return (ch == " " || ch == "\t" || ch == "\n" || ch == "\r");
+}
+
+function SIMPLE_TRIM(text)
+{
+	// Équivalent maison de String.trim()
+	// Enlève les espaces au début et à la fin d'une chaîne
+	// J'aurais pu utiliser text.trim() mais j'ai voulu le faire à la main
+
+	let s;        // La chaîne à traiter
+	let start;    // Index du premier caractère non-blanc
+	let end;      // Index du dernier caractère non-blanc
+	let out;      // Résultat final
+	let i;        // Compteur de boucle
+
+	// Gère le cas où text est null
+	if(text == null)
+	{
+		return "";
+	}
+
+	// Convertit en String au cas où c'est autre chose
+	s = String(text);
+
+	// Trouve le premier caractère non-blanc depuis le début
+	start = 0;
+	while(start < s.length && IS_WHITE_SPACE(s.charAt(start)))
+	{
+		start = start + 1;
+	}
+
+	// Trouve le dernier caractère non-blanc depuis la fin
+	end = s.length - start;
+	while(end >= start && IS_WHITE_SPACE(s.charAt(end)))
+	{
+		end = end - 1;
+	}
+
+	// Reconstruit la chaîne sans les espaces
+	out = "";
+	for(i = start; i <= end; i = i + 1)
+	{
+		out = out + s.charAt(i);
+	}
+
+	return out;
+}
+
+function HAS_PY_EXTENSION(name)
+{
+	// Vérifie si un nom de fichier se termine par ".py"
+	// Utilisé pour s'assurer qu'on sauvegarde bien des scripts Python
+
+	let ext;  // Les 3 derniers caractères du nom
+
+	if(name == null)
+	{
+		return false;
+	}
+
+	// Un nom de fichier .py fait au moins 3 caractères (genre "a.py")
+	if(name.length < 3)
+	{
+		return false;
+	}
+
+	// Extrait les 3 derniers caractères manuellement
+	ext = name.charAt(name.length - 3) + name.charAt(name.length - 2) + name.charAt(name.length - 1);
+
+	if(ext == ".py")
+	{
+		return true;
+	}
+
+	return false;
+}
+
+/******************************************************************************/
+// Python input() bridge - Pont entre JS et Python pour la fonction input()
+/******************************************************************************/
+
+function JS_INPUT(PROMPT_TEXT)
+{
+	// Cette fonction est appelée depuis Python quand on fait input("texte")
+	// Elle retourne une Promise qui sera résolue quand l'utilisateur appuie sur Entrée
+	// C'est le "pont" qui permet à Python d'attendre une saisie utilisateur
+
+	if(term == null)
+	{
+		// Si pas de terminal, on renvoie une chaîne vide
+		return Promise.resolve("");
+	}
+
+	// On active le mode "attente d'input"
+	PY_INPUT_ACTIVE = true;
+
+	// On vide le buffer de saisie
+	PY_INPUT_BUFFER = "";
+
+	// Affiche le texte du prompt (ex: "Entrez votre nom: ")
+	if(PROMPT_TEXT)
+	{
+		term.write(String(PROMPT_TEXT));
+	}
+
+	// Réinitialise la ligne courante
+	currentLine = "";
+
+	// Retourne une Promise qui sera résolue dans handleInput() quand on appuie Entrée
+	return new Promise(function(resolve)
+	{
+		// On garde la fonction resolve pour l'appeler plus tard
+		PY_INPUT_RESOLVE = resolve;
+	});
+}
+
+// Expose la fonction JS_INPUT globalement pour que Pyodide puisse l'appeler
+window.js_input = JS_INPUT;
+
+/******************************************************************************/
+// Boot - Initialisation au démarrage
+/******************************************************************************/
+
+function onWindowLoad()
+{
+	// Fonction principale d'initialisation appelée quand la page est prête
+
+	// 1. Active le service worker pour le mode PWA/offline
+	registerServiceWorker();
+
+	// 2. Configure les boutons d'ouverture de fichiers
+	setupFileOpen();
+
+	// 3. Crée et configure le terminal xterm.js
+	initTerminal();
+
+	// 4. Charge l'historique des commandes depuis localStorage
+	PY_HISTORY = LOAD_PY_HISTORY();
+
+	// 5. Place l'index à la fin de l'historique (pour que flèche haut montre la dernière commande)
+	PY_HISTORY_INDEX = PY_HISTORY.length;
+
+	// 6. Initialise l'interpréteur Python (Pyodide)
+	initPython(term, printPrompt);
+
+	// 7. Configure le panneau de gestion des scripts
+	INIT_SCRIPT_PANEL();
+
+	// 8. Configure le panneau d'IA (génération de code)
+	INIT_AI_PANEL();
+}
+
+function initTerminal()
+{
+	// Crée et configure le terminal de commande (utilise xterm.js)
+
+	let CONTAINER;      // L'élément HTML qui contiendra le terminal
+	let IS_MOBILE;      // Booléen pour savoir si on est sur mobile
+	let TERMINAL_COLS;  // Nombre de colonnes (largeur) du terminal
+
+	// Récupère le div qui va contenir le terminal
+	CONTAINER = document.getElementById("terminal");
+	if(CONTAINER == null)
+	{
+		return;  // Si pas de container, on abandonne
+	}
+
+	// Détecte si on est sur mobile (écran < 900px)
+	IS_MOBILE = false;
+	if(window.innerWidth < 900)
+	{
+		IS_MOBILE = true;
+	}
+
+	// Sur mobile, terminal plus étroit (38 colonnes vs 80 sur desktop)
+	if(IS_MOBILE)
+	{
+		TERMINAL_COLS = 38;
+	}
+	else
+	{
+		TERMINAL_COLS = 80;
+	}
+
+	// Crée l'objet Terminal avec toutes ses options de configuration
+	term = new Terminal(
+	{
+		cursorBlink: true,  // Le curseur clignote
+		theme:
+		{
+			background: "#000000",  // Fond noir
+			foreground: "#ffffff"   // Texte blanc
+		},
+		scrollback: 2000,    // On peut remonter jusqu'à 2000 lignes
+		convertEol: true,    // Convertit les fins de ligne automatiquement
+		cols: TERMINAL_COLS, // Largeur en colonnes
+		rows: 25             // Hauteur en lignes
+	});
+
+	// Attache le terminal au container HTML
+	term.open(CONTAINER);
+
+	// Petit délai puis rafraîchissement pour éviter des bugs d'affichage
+	setTimeout(function()
+	{
+		if(term != null)
+		{
+			term.refresh(0, term.rows - 1);
+		}
+	}, 100);
+
+	// Re-expose js_input au cas où
+	window.js_input = JS_INPUT;
+
+	// Connecte la fonction handleInput pour capturer ce que l'utilisateur tape
+	term.onData(handleInput);
+}
+
+/******************************************************************************/
+// Terminal I/O - Gestion des entrées/sorties du terminal
+/******************************************************************************/
+
+function printPrompt()
+{
+	// Affiche le prompt Python classique ">>> "
+	// Appelé après chaque commande exécutée
+
+	if(term == null)
+	{
+		return;
+	}
+
+	term.write(">>> ");
+	currentLine = "";  // Réinitialise la ligne de saisie
+}
+
+function handleInput(data)
+{
+	// Fonction centrale qui gère TOUT ce que l'utilisateur tape au clavier
+	// C'est le coeur de l'interaction avec le terminal
+
+	let CODE;  // Code ASCII du premier caractère tapé
+	let CMD;   // Commande finale à exécuter
+
+	CODE = data.charCodeAt(0);
+
+	// ========================================================================
+	// CAS 1 : On est en mode input() Python
+	// L'utilisateur doit entrer une valeur pour un input() en cours
+	// ========================================================================
+	if(PY_INPUT_ACTIVE == true)
+	{
+		// Touche Entrée (code 13) = fin de la saisie input()
+		if(CODE == 13)
+		{
+			term.write("\r\n");  // Retour à la ligne
+			PY_INPUT_ACTIVE = false;  // On sort du mode input
+
+			// Résout la Promise avec ce que l'utilisateur a tapé
+			if(PY_INPUT_RESOLVE != null)
+			{
+				PY_INPUT_RESOLVE(PY_INPUT_BUFFER);
+			}
+
+			// Nettoie les variables
+			PY_INPUT_BUFFER = "";
+			PY_INPUT_RESOLVE = null;
+			return;
+		}
+
+		// Touche Backspace (code 127) = effacer le dernier caractère
+		if(CODE == 127)
+		{
+			if(PY_INPUT_BUFFER.length > 0)
+			{
+				// Enlève le dernier caractère du buffer
+				PY_INPUT_BUFFER = PY_INPUT_BUFFER.slice(0, PY_INPUT_BUFFER.length - 1);
+				// Efface visuellement dans le terminal (retour + espace + retour)
+				term.write("\b \b");
+			}
+			return;
+		}
+
+		// Ignore les caractères de contrôle (sauf Tab qui a le code 9)
+		if(CODE < 32 && CODE != 9)
+		{
+			return;
+		}
+
+		// Caractère normal : on l'ajoute au buffer et on l'affiche
+		PY_INPUT_BUFFER = PY_INPUT_BUFFER + data;
+		term.write(data);
+		return;
+	}
+
+	// ========================================================================
+	// CAS 2 : Mode normal (pas en input())
+	// ========================================================================
+
+	// Flèche haut = remonter dans l'historique des commandes
+	if(data == "\u001b[A")
+	{
+		if(PY_HISTORY.length > 0)
+		{
+			// Remonte d'un cran dans l'historique
+			if(PY_HISTORY_INDEX > 0)
+			{
+				PY_HISTORY_INDEX = PY_HISTORY_INDEX - 1;
+			}
+			// Remplace la ligne actuelle par la commande de l'historique
+			REPLACE_CURRENT_LINE(PY_HISTORY[PY_HISTORY_INDEX] || "");
+		}
+		return;
+	}
+
+	// Flèche bas = descendre dans l'historique des commandes
+	if(data == "\u001b[B")
+	{
+		if(PY_HISTORY_INDEX < PY_HISTORY.length)
+		{
+			PY_HISTORY_INDEX = PY_HISTORY_INDEX + 1;
+		}
+
+		// Si on est à la fin de l'historique, on affiche une ligne vide
+		if(PY_HISTORY_INDEX == PY_HISTORY.length)
+		{
+			REPLACE_CURRENT_LINE("");
+		}
+		else
+		{
+			REPLACE_CURRENT_LINE(PY_HISTORY[PY_HISTORY_INDEX] || "");
+		}
+		return;
+	}
+
+	// Touche Entrée = exécuter la commande
+	if(CODE == 13)
+	{
+		CMD = SIMPLE_TRIM(currentLine);  // Nettoie la commande
+		term.write("\r\n");  // Nouvelle ligne
+		runCommand(CMD);  // Exécute la commande
+		return;
+	}
+
+	// Touche Backspace = effacer le dernier caractère
+	if(CODE == 127)
+	{
+		if(currentLine.length > 0)
+		{
+			currentLine = currentLine.slice(0, currentLine.length - 1);
+			term.write("\b \b");
+		}
+		return;
+	}
+
+	// Ignore les autres caractères de contrôle (sauf Tab)
+	if(CODE < 32 && CODE != 9)
+	{
+		return;
+	}
+
+	// Caractère normal : on l'ajoute à la ligne et on l'affiche
+	currentLine = currentLine + data;
+	term.write(data);
+}
+
+/******************************************************************************/
+// Command Router - Exécution des commandes
+/******************************************************************************/
+
+function runCommand(cmdLine)
+{
+	// Reçoit une commande et décide quoi en faire
+
+	if(term == null)
+	{
+		return;
+	}
+
+	// Si la commande est vide, on réaffiche juste le prompt
+	if(cmdLine == null || cmdLine == "")
+	{
+		printPrompt();
+		return;
+	}
+
+	// Commande spéciale "help"
+	if(cmdLine == "help")
+	{
+		term.writeln("Python REPL actif");
+		printPrompt();
+		return;
+	}
+
+	// Ajoute la commande à l'historique
+	PUSH_PY_HISTORY(cmdLine);
+
+	// Exécute la commande Python
+	runPythonLine(cmdLine, term, printPrompt);
+}
+
+/******************************************************************************/
+// File API - Ouverture et exécution de fichiers Python
+/******************************************************************************/
+
+function setupFileOpen()
+{
+	// Configure les boutons pour ouvrir et exécuter des fichiers .py
+
+	let OPEN_BTN;    // Bouton "Ouvrir"
+	let FILE_INPUT;  // Input caché pour sélectionner un fichier
+	let EDITOR;      // Zone de texte de l'éditeur
+	let RUN_BTN;     // Bouton "Exécuter"
+
+	OPEN_BTN = document.getElementById("open-script-btn");
+	FILE_INPUT = document.getElementById("file-input");
+	EDITOR = document.getElementById("editor");
+
+	if(OPEN_BTN == null || FILE_INPUT == null || EDITOR == null)
+	{
+		return;  // Si un élément manque, on abandonne
+	}
+
+	// Quand on clique sur "Ouvrir", ça déclenche l'input file
+	OPEN_BTN.addEventListener("click", onOpenClick);
+
+	// Quand un fichier est sélectionné, on le charge
+	FILE_INPUT.addEventListener("change", onFileChange);
+
+	function onOpenClick(event)
+	{
+		// Empêche le comportement par défaut et ouvre le sélecteur de fichier
+		event.preventDefault();
+		FILE_INPUT.value = "";  // Reset pour pouvoir réouvrir le même fichier
+		FILE_INPUT.click();
+	}
+
+	function onFileChange()
+	{
+		// Appelé quand l'utilisateur a choisi un fichier
+
+		let FILE;    // Le fichier sélectionné
+		let READER;  // FileReader pour lire le contenu
+
+		FILE = null;
+		if(FILE_INPUT.files && FILE_INPUT.files[0])
+		{
+			FILE = FILE_INPUT.files[0];
+		}
+
+		if(FILE == null)
+		{
+			return;
+		}
+
+		READER = new FileReader();
+
+		// Quand la lecture est terminée
+		READER.onload = function()
+		{
+			// Met le contenu du fichier dans l'éditeur
+			EDITOR.value = READER.result;
+			// Garde le nom du fichier en mémoire
+			EDITOR.dataset.filename = FILE.name;
+
+			// Affiche un message dans le terminal
+			if(term != null)
+			{
+				term.writeln("[LOADED] " + FILE.name);
+				printPrompt();
+			}
+		};
+
+		// Lance la lecture du fichier comme texte
+		READER.readAsText(FILE);
+	}
+
+	// Configure le bouton "Exécuter" de l'éditeur
+	RUN_BTN = document.getElementById("run-editor-btn");
+	if(RUN_BTN != null)
+	{
+		RUN_BTN.addEventListener("click", onRunClick);
+	}
+
+	function onRunClick()
+	{
+		// Exécute le code présent dans l'éditeur
+
+		let CODE;      // Le code Python à exécuter
+		let FILENAME;  // Nom du fichier (pour l'affichage)
+
+		CODE = "";
+		if(EDITOR.value != null)
+		{
+			CODE = EDITOR.value;
+		}
+
+		FILENAME = "editor.py";
+		if(EDITOR.dataset && EDITOR.dataset.filename)
+		{
+			FILENAME = EDITOR.dataset.filename;
+		}
+
+		term.writeln("[RUN] " + FILENAME);
+		// Appelle la fonction qui exécute un script Python complet
+		runPythonScript(CODE, term, printPrompt);
+	}
+}
+
+/******************************************************************************/
+// Python History - Historique des commandes sauvegardé dans localStorage
+/******************************************************************************/
+
+function LOAD_PY_HISTORY()
+{
+	// Charge l'historique des commandes depuis localStorage
+	// Retourne un tableau vide si rien n'est trouvé ou en cas d'erreur
+
+	let RAW;   // Données brutes (JSON string)
+	let DATA;  // Données parsées (tableau)
+
+	try
+	{
+		RAW = localStorage.getItem(PY_HISTORY_KEY);
+
+		if(RAW == null || RAW == "")
+		{
+			return [];
+		}
+
+		DATA = JSON.parse(RAW);
+
+		// Vérifie que c'est bien un tableau
+		if(DATA == null || DATA.length == undefined)
+		{
+			return [];
+		}
+
+		return DATA;
+	}
+	catch(e)
+	{
+		// En cas d'erreur (JSON invalide, etc.), on retourne un tableau vide
+		return [];
+	}
+}
+
+function SAVE_PY_HISTORY()
+{
+	// Sauvegarde l'historique dans localStorage
+
+	let TEMP;  // Copie temporaire de l'historique
+
+	try
+	{
+		TEMP = PY_HISTORY;
+
+		// Si l'historique dépasse la limite, on garde seulement les dernières entrées
+		if(TEMP.length > PY_HISTORY_MAX)
+		{
+			TEMP = TEMP.slice(TEMP.length - PY_HISTORY_MAX);
+		}
+
+		localStorage.setItem(PY_HISTORY_KEY, JSON.stringify(TEMP));
+	}
+	catch(e)
+	{
+		// Log l'erreur mais ne plante pas
+		console.log(e)
+	}
+}
+
+function PUSH_PY_HISTORY(CMD)
+{
+	// Ajoute une commande à l'historique
+
+	if(CMD == null || CMD == "")
+	{
+		return;  // On n'ajoute pas les commandes vides
+	}
+
+	// Évite les doublons consécutifs (si on tape 2x la même commande)
+	if(PY_HISTORY.length > 0)
+	{
+		if(PY_HISTORY[PY_HISTORY.length - 1] == CMD)
+		{
+			// Même commande que la précédente, on n'ajoute pas
+			PY_HISTORY_INDEX = PY_HISTORY.length;
+			return;
+		}
+	}
+
+	// Ajoute la commande à la fin
+	PY_HISTORY.push(CMD);
+
+	// Tronque si on dépasse la limite
+	if(PY_HISTORY.length > PY_HISTORY_MAX)
+	{
+		PY_HISTORY = PY_HISTORY.slice(PY_HISTORY.length - PY_HISTORY_MAX);
+	}
+
+	// Remet l'index à la fin
+	PY_HISTORY_INDEX = PY_HISTORY.length;
+
+	// Sauvegarde immédiatement
+	SAVE_PY_HISTORY();
+}
+
+function REPLACE_CURRENT_LINE(NEW_LINE)
+{
+	// Remplace visuellement la ligne actuelle dans le terminal
+	// Utilisé pour naviguer dans l'historique avec les flèches
+
+	// Efface la ligne actuelle caractère par caractère
+	while(currentLine.length > 0)
+	{
+		currentLine = currentLine.slice(0, currentLine.length - 1);
+		term.write("\b \b");  // Backspace + espace + backspace
+	}
+
+	// Écrit la nouvelle ligne
+	currentLine = NEW_LINE;
+	term.write(NEW_LINE);
+}
+
+/******************************************************************************/
+// Scripts panel - Gestion des scripts sauvegardés dans localStorage
+/******************************************************************************/
+
+function INIT_SCRIPT_PANEL()
+{
+	// Initialise le panneau latéral de gestion des scripts
+
+	let SAVE_BTN;     // Bouton pour sauvegarder le script actuel
+	let LIST;         // Container de la liste des scripts
+	let EXPORT_BTN;   // Bouton pour exporter tous les scripts en JSON
+	let IMPORT_BTN;   // Bouton pour importer des scripts
+	let IMPORT_FILE;  // Input file caché pour l'import
+
+	SAVE_BTN = document.getElementById("save-script-btn");
+	LIST = document.getElementById("scripts-list");
+
+	if(SAVE_BTN == null || LIST == null)
+	{
+		return;
+	}
+
+	SAVE_BTN.addEventListener("click", onSaveClick);
+
+	function onSaveClick()
+	{
+		SAVE_CURRENT_EDITOR_AS_SCRIPT();
+	}
+
+	// Affiche la liste des scripts existants
+	RENDER_SCRIPTS_LIST();
+
+	// Configure les boutons d'import/export
+	EXPORT_BTN = document.getElementById("export-btn");
+	IMPORT_BTN = document.getElementById("import-btn");
+	IMPORT_FILE = document.getElementById("import-file");
+
+	if(EXPORT_BTN != null)
+	{
+		EXPORT_BTN.addEventListener("click", function()
+		{
+			EXPORT_SCRIPTS();
+		});
+	}
+
+	if(IMPORT_BTN != null && IMPORT_FILE != null)
+	{
+		IMPORT_BTN.addEventListener("click", function()
+		{
+			IMPORT_FILE.value = "";
+			IMPORT_FILE.click();
+		});
+
+		IMPORT_FILE.addEventListener("change", function()
+		{
+			if(IMPORT_FILE.files && IMPORT_FILE.files[0])
+			{
+				IMPORT_SCRIPTS(IMPORT_FILE.files[0]);
+			}
+		});
+	}
+}
+
+function GET_SCRIPTS()
+{
+	// Récupère tous les scripts sauvegardés depuis localStorage
+	// Retourne un tableau d'objets script
+
+	let RAW;  // JSON brut
+	let ARR;  // Tableau parsé
+
+	RAW = localStorage.getItem(STORAGE_KEY_SCRIPTS);
+
+	if(RAW == null || RAW == "")
+	{
+		return [];
+	}
+
+	try
+	{
+		ARR = JSON.parse(RAW);
+		if(ARR == null || ARR.length == undefined)
+		{
+			return [];
+		}
+		return ARR;
+	}
+	catch(E)
+	{
+		return [];
+	}
+}
+
+function SET_SCRIPTS(SCRIPTS)
+{
+	// Sauvegarde la liste complète des scripts dans localStorage
+	localStorage.setItem(STORAGE_KEY_SCRIPTS, JSON.stringify(SCRIPTS));
+}
+
+function UPSERT_SCRIPT(NAME, CONTENT)
+{
+	// UPSERT = UPDATE + INSERT
+	// Si le script existe, on le met à jour
+	// Sinon, on en crée un nouveau
+
+	let SCRIPTS;     // Liste actuelle des scripts
+	let NOW;         // Timestamp actuel
+	let FOUND;       // Booléen : script trouvé ou pas
+	let I;           // Compteur de boucle
+	let NEW_SCRIPT;  // Nouveau script à créer si nécessaire
+
+	SCRIPTS = GET_SCRIPTS();
+	NOW = Date.now();
+
+	FOUND = false;
+	I = 0;
+
+	// Cherche si un script avec ce nom existe déjà
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name == NAME)
+		{
+			// Trouvé ! On met à jour le contenu et la date
+			SCRIPTS[I].content = CONTENT;
+			SCRIPTS[I].updatedAt = NOW;
+			FOUND = true;
+			break;
+		}
+		I = I + 1;
+	}
+
+	// Si pas trouvé, on crée un nouveau script
+	if(FOUND == false)
+	{
+		NEW_SCRIPT = {};
+		NEW_SCRIPT.id = String(NOW);  // ID unique basé sur le timestamp
+		NEW_SCRIPT.name = NAME;
+		NEW_SCRIPT.content = CONTENT;
+		NEW_SCRIPT.createdAt = NOW;
+		NEW_SCRIPT.updatedAt = NOW;
+
+		// Ajoute le nouveau script au début de la liste
+		SCRIPTS = [NEW_SCRIPT].concat(SCRIPTS);
+	}
+
+	SET_SCRIPTS(SCRIPTS);
+}
+
+function DELETE_SCRIPT(NAME)
+{
+	// Supprime un script par son nom
+
+	let SCRIPTS;  // Liste actuelle
+	let OUT;      // Nouvelle liste sans le script supprimé
+	let I;        // Compteur
+
+	SCRIPTS = GET_SCRIPTS();
+	OUT = [];
+	I = 0;
+
+	// Recopie tous les scripts SAUF celui à supprimer
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name != NAME)
+		{
+			OUT.push(SCRIPTS[I]);
+		}
+		I = I + 1;
+	}
+
+	SET_SCRIPTS(OUT);
+}
+
+/******************************************************************************/
+// Terminal resize helpers - Adaptation à la taille de la fenêtre
+/******************************************************************************/
+
+function fitTerminal()
+{
+	// Rafraîchit l'affichage du terminal
+	if(term != null)
+	{
+		term.refresh(0, term.rows - 1);
+	}
+}
+
+function onResize()
+{
+	// Appelé quand la fenêtre est redimensionnée
+	fitTerminal();
+}
+
+/******************************************************************************/
+// Script actions - Actions sur les scripts (charger, renommer, télécharger...)
+/******************************************************************************/
+
+function RENAME_SCRIPT(OLD_NAME, NEW_NAME)
+{
+	// Renomme un script existant
+
+	let SCRIPTS;  // Liste des scripts
+	let I;        // Compteur
+
+	SCRIPTS = GET_SCRIPTS();
+	I = 0;
+
+	// Vérifie d'abord que le nouveau nom n'existe pas déjà
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name == NEW_NAME)
+		{
+			alert("Nom déjà utilisé.");
+			return;
+		}
+		I = I + 1;
+	}
+
+	// Cherche le script à renommer
+	I = 0;
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name == OLD_NAME)
+		{
+			SCRIPTS[I].name = NEW_NAME;
+			SCRIPTS[I].updatedAt = Date.now();
+			SET_SCRIPTS(SCRIPTS);
+			return;
+		}
+		I = I + 1;
+	}
+}
+
+function LOAD_SCRIPT_TO_EDITOR(NAME)
+{
+	// Charge un script sauvegardé dans l'éditeur
+
+	let EDITOR;   // Zone de texte de l'éditeur
+	let SCRIPTS;  // Liste des scripts
+	let I;        // Compteur
+
+	EDITOR = document.getElementById("editor");
+	if(EDITOR == null)
+	{
+		return;
+	}
+
+	SCRIPTS = GET_SCRIPTS();
+	I = 0;
+
+	// Cherche le script par son nom
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name == NAME)
+		{
+			// Met le contenu dans l'éditeur
+			if(SCRIPTS[I].content != null)
+			{
+				EDITOR.value = SCRIPTS[I].content;
+			}
+			else
+			{
+				EDITOR.value = "";
+			}
+
+			// Mémorise le nom du fichier
+			EDITOR.dataset.filename = NAME;
+			return;
+		}
+		I = I + 1;
+	}
+}
+
+function DOWNLOAD_SCRIPT(NAME)
+{
+	// Télécharge un script sous forme de fichier .py
+
+	let SCRIPTS;   // Liste des scripts
+	let CONTENT;   // Contenu du script à télécharger
+	let I;         // Compteur
+	let BLOB;      // Objet Blob pour créer le fichier
+	let URL_OBJ;   // URL temporaire du blob
+	let A;         // Élément <a> pour déclencher le téléchargement
+
+	SCRIPTS = GET_SCRIPTS();
+	CONTENT = null;
+
+	// Cherche le script
+	I = 0;
+	while(I < SCRIPTS.length)
+	{
+		if(SCRIPTS[I].name == NAME)
+		{
+			if(SCRIPTS[I].content != null)
+			{
+				CONTENT = SCRIPTS[I].content;
+			}
+			else
+			{
+				CONTENT = "";
+			}
+			break;
+		}
+		I = I + 1;
+	}
+
+	if(CONTENT == null)
+	{
+		return;  // Script non trouvé
+	}
+
+	// Crée un Blob (fichier en mémoire) avec le contenu
+	BLOB = new Blob([CONTENT], { type: "text/x-python" });
+
+	// Crée une URL temporaire pour ce blob
+	URL_OBJ = URL.createObjectURL(BLOB);
+
+	// Crée un lien <a> invisible et clique dessus pour télécharger
+	A = document.createElement("a");
+	A.href = URL_OBJ;
+	A.download = NAME;  // Nom du fichier téléchargé
+
+	document.body.appendChild(A);
+	A.click();
+	document.body.removeChild(A);
+
+	// Libère l'URL temporaire
+	URL.revokeObjectURL(URL_OBJ);
+}
+
+function SAVE_CURRENT_EDITOR_AS_SCRIPT()
+{
+	// Sauvegarde le contenu actuel de l'éditeur comme nouveau script
+
+	let EDITOR;        // Zone de texte
+	let DEFAULT_NAME;  // Nom par défaut
+	let NAME;          // Nom choisi par l'utilisateur
+	let CONTENT;       // Contenu à sauvegarder
+
+	EDITOR = document.getElementById("editor");
+	if(EDITOR == null)
+	{
+		return;
+	}
+
+	// Utilise le nom de fichier actuel comme valeur par défaut
+	DEFAULT_NAME = "script.py";
+	if(EDITOR.dataset && EDITOR.dataset.filename)
+	{
+		DEFAULT_NAME = EDITOR.dataset.filename;
+	}
+
+	// Demande le nom à l'utilisateur
+	NAME = prompt("Nom du script :", DEFAULT_NAME);
+	if(NAME == null || NAME == "")
+	{
+		return;  // Annulé
+	}
+
+	// Ajoute .py si l'utilisateur ne l'a pas mis
+	if(HAS_PY_EXTENSION(NAME) == false)
+	{
+		NAME = NAME + ".py";
+	}
+
+	CONTENT = "";
+	if(EDITOR.value != null)
+	{
+		CONTENT = EDITOR.value;
+	}
+
+	// Sauvegarde (crée ou met à jour)
+	UPSERT_SCRIPT(NAME, CONTENT);
+	EDITOR.dataset.filename = NAME;
+
+	// Rafraîchit la liste affichée
+	RENDER_SCRIPTS_LIST();
+}
+
+function RENDER_SCRIPTS_LIST()
+{
+	// Affiche la liste de tous les scripts sauvegardés dans le panneau
+
+	let LIST;     // Container HTML de la liste
+	let SCRIPTS;  // Tableau des scripts
+	let i;        // Compteur
+
+	LIST = document.getElementById("scripts-list");
+	if(LIST == null)
+	{
+		return;
+	}
+
+	SCRIPTS = GET_SCRIPTS();
+	LIST.innerHTML = "";  // Vide la liste actuelle
+
+	// Si aucun script, affiche un message
+	if(SCRIPTS.length == 0)
+	{
+		LIST.innerHTML = '<div style="color:#777;font-family:monospace;">Aucun script sauvegardé.</div>';
+		return;
+	}
+
+	// Crée une ligne pour chaque script
+	for(i = 0; i < SCRIPTS.length; i = i + 1)
+	{
+		createScriptRow(LIST, SCRIPTS[i]);
+	}
+
+	// Met à jour les composants Material Design Lite si présents
+	if(window.componentHandler && window.componentHandler.upgradeDom)
+	{
+		window.componentHandler.upgradeDom();
+	}
+}
+
+function createScriptRow(LIST, ITEM)
+{
+	// Crée une ligne dans la liste des scripts avec les boutons d'action
+
+	let ROW;         // Div conteneur de la ligne
+	let NAME_DIV;    // Div pour le nom du script
+	let ACTIONS;     // Div pour les boutons d'action
+
+	let BTN_LOAD;    // Bouton "Charger"
+	let BTN_RENAME;  // Bouton "Renommer"
+	let BTN_DL;      // Bouton "Télécharger"
+	let BTN_DEL;     // Bouton "Supprimer"
+
+	// Crée le conteneur de la ligne
+	ROW = document.createElement("div");
+	ROW.className = "script-row";
+
+	// Crée le div avec le nom du script
+	NAME_DIV = document.createElement("div");
+	NAME_DIV.className = "script-name";
+	NAME_DIV.textContent = ITEM.name;
+
+	// Crée le conteneur des boutons
+	ACTIONS = document.createElement("div");
+	ACTIONS.className = "script-actions";
+
+	// === Bouton CHARGER ===
+	BTN_LOAD = document.createElement("button");
+	BTN_LOAD.className = "mdl-button mdl-js-button mdl-button--raised mdl-button--colored";
+	BTN_LOAD.textContent = "Charger";
+	BTN_LOAD.addEventListener("click", function()
+	{
+		LOAD_SCRIPT_TO_EDITOR(ITEM.name);
+	});
+
+	// === Bouton RENOMMER ===
+	BTN_RENAME = document.createElement("button");
+	BTN_RENAME.className = "mdl-button mdl-js-button mdl-button--raised mdl-button--colored";
+	BTN_RENAME.textContent = "Renommer";
+	BTN_RENAME.addEventListener("click", function()
+	{
+		let NEW_NAME;
+
+		NEW_NAME = prompt("Nouveau nom :", ITEM.name);
+		if(NEW_NAME == null || NEW_NAME == "")
+		{
+			return;
+		}
+
+		// Ajoute .py si nécessaire
+		if(HAS_PY_EXTENSION(NEW_NAME) == false)
+		{
+			NEW_NAME = NEW_NAME + ".py";
+		}
+
+		RENAME_SCRIPT(ITEM.name, NEW_NAME);
+		RENDER_SCRIPTS_LIST();  // Rafraîchit la liste
+	});
+
+	// === Bouton TÉLÉCHARGER ===
+	BTN_DL = document.createElement("button");
+	BTN_DL.className = "mdl-button mdl-js-button mdl-button--raised mdl-button--colored";
+	BTN_DL.textContent = "Télécharger";
+	BTN_DL.addEventListener("click", function()
+	{
+		DOWNLOAD_SCRIPT(ITEM.name);
+	});
+
+	// === Bouton SUPPRIMER ===
+	BTN_DEL = document.createElement("button");
+	BTN_DEL.className = "mdl-button mdl-js-button mdl-button--raised mdl-button--colored";
+	BTN_DEL.textContent = "Supprimer";
+	BTN_DEL.addEventListener("click", function()
+	{
+		// Demande confirmation avant de supprimer
+		if(confirm("Supprimer " + ITEM.name + " ?") == false)
+		{
+			return;
+		}
+
+		DELETE_SCRIPT(ITEM.name);
+		RENDER_SCRIPTS_LIST();
+	});
+
+	// Assemble tous les éléments
+	ACTIONS.appendChild(BTN_LOAD);
+	ACTIONS.appendChild(BTN_RENAME);
+	ACTIONS.appendChild(BTN_DL);
+	ACTIONS.appendChild(BTN_DEL);
+
+	ROW.appendChild(NAME_DIV);
+	ROW.appendChild(ACTIONS);
+
+	LIST.appendChild(ROW);
+}
+
+/******************************************************************************/
+// Import / Export JSON - Sauvegarde et restauration de tous les scripts
+/******************************************************************************/
+
+function EXPORT_SCRIPTS()
+{
+	// Exporte tous les scripts sauvegardés en un fichier JSON
+	// Utile pour faire une sauvegarde ou transférer vers un autre navigateur
+
+	let DATA;      // Données JSON des scripts
+	let BLOB;      // Fichier en mémoire
+	let URL_OBJ;   // URL temporaire
+	let A;         // Lien pour télécharger
+
+	DATA = localStorage.getItem(STORAGE_KEY_SCRIPTS);
+
+	if(DATA == null || DATA == "")
+	{
+		alert("Aucun script à exporter.");
+		return;
+	}
+
+	// Crée le fichier JSON
+	BLOB = new Blob([DATA], { type: "application/json" });
+	URL_OBJ = URL.createObjectURL(BLOB);
+
+	// Télécharge le fichier
+	A = document.createElement("a");
+	A.href = URL_OBJ;
+	A.download = "rtermlab_scripts.json";
+
+	document.body.appendChild(A);
+	A.click();
+	document.body.removeChild(A);
+
+	URL.revokeObjectURL(URL_OBJ);
+}
+
+function IMPORT_SCRIPTS(FILE)
+{
+	// Importe des scripts depuis un fichier JSON
+	// Remplace tous les scripts existants !
+
+	let READER;  // FileReader pour lire le fichier
+
+	READER = new FileReader();
+
+	READER.onload = function()
+	{
+		let DATA;  // Données parsées
+
+		try
+		{
+			DATA = JSON.parse(READER.result);
+
+			// Vérifie que c'est bien un tableau
+			if(DATA == null || DATA.length == undefined)
+			{
+				alert("Fichier invalide.");
+				return;
+			}
+
+			// Remplace les scripts existants
+			localStorage.setItem(STORAGE_KEY_SCRIPTS, JSON.stringify(DATA));
+			RENDER_SCRIPTS_LIST();  // Rafraîchit l'affichage
+		}
+		catch(e)
+		{
+			alert("Erreur lors de l'import.");
+		}
+	};
+
+	READER.readAsText(FILE);
+}
+
+/******************************************************************************/
+// IA (Speech + OpenRouter) - Génération de code par intelligence artificielle
+/******************************************************************************/
+
+function INIT_AI_PANEL()
+{
+	// Initialise le panneau d'IA avec dictée vocale et génération de code
+
+	let BTN_KEY;  // Bouton pour configurer la clé API
+	let BTN_MIC;  // Bouton pour la dictée vocale
+	let BTN_GEN;  // Bouton pour générer du code
+	let PROMPT;   // Zone de texte pour la demande
+
+	BTN_KEY = document.getElementById("ai-api-key-btn");
+	BTN_MIC = document.getElementById("ai-mic-btn");
+	BTN_GEN = document.getElementById("ai-generate-btn");
+	PROMPT = document.getElementById("ai-prompt");
+
+	if(BTN_KEY == null || BTN_MIC == null || BTN_GEN == null || PROMPT == null)
+	{
+		return;
+	}
+
+	BTN_KEY.addEventListener("click", function()
+	{
+		SET_AI_KEY();
+	});
+
+	BTN_MIC.addEventListener("click", function()
+	{
+		START_SPEECH_TO_PROMPT();
+	});
+
+	BTN_GEN.addEventListener("click", function()
+	{
+		GENERATE_PYTHON_FROM_PROMPT();
+	});
+
+	// Message de statut initial
+	AI_STATUS('Prêt. (Dicte ou écris une demande, puis "Générer code")');
+}
+
+function AI_STATUS(TEXT)
+{
+	// Affiche un message de statut dans le panneau IA
+
+	let EL;  // Élément HTML de statut
+
+	EL = document.getElementById("ai-status");
+	if(EL == null)
+	{
+		return;
+	}
+
+	EL.textContent = TEXT;
+}
+
+function GET_AI_KEY()
+{
+	// Récupère la clé API OpenRouter depuis localStorage
+
+	try
+	{
+		return localStorage.getItem(AI_KEY_STORAGE);
+	}
+	catch(E)
+	{
+		return null;
+	}
+}
+
+function SET_AI_KEY()
+{
+	// Permet à l'utilisateur de configurer sa clé API OpenRouter
+	// La clé est nécessaire pour utiliser l'IA
+
+	let PROMPT_EL;  // Zone de texte (on peut y coller la clé)
+	let KEY;        // La clé API
+
+	PROMPT_EL = document.getElementById("ai-prompt");
+	KEY = "";
+
+	// Vérifie si la clé est dans la zone de texte
+	if(PROMPT_EL != null && PROMPT_EL.value != null)
+	{
+		KEY = SIMPLE_TRIM(PROMPT_EL.value);
+	}
+
+	// Si pas de clé dans la zone de texte, demande via prompt()
+	if(KEY == "")
+	{
+		KEY = prompt("Colle ta clé OpenRouter (sk-or-v1-...) :");
+		KEY = SIMPLE_TRIM(KEY);
+	}
+
+	if(KEY == null || KEY == "")
+	{
+		return;  // Annulé
+	}
+
+	try
+	{
+		// Sauvegarde la clé
+		localStorage.setItem(AI_KEY_STORAGE, KEY);
+		AI_STATUS("Clé enregistrée");
+
+		// Vide la zone de texte pour pas laisser la clé visible
+		if(PROMPT_EL != null)
+		{
+			PROMPT_EL.value = "";
+		}
+	}
+	catch(E)
+	{
+		AI_STATUS("Impossible d'enregistrer la clé (storage).");
+	}
+}
+
+function START_SPEECH_TO_PROMPT()
+{
+	// Lance la reconnaissance vocale pour dicter une demande
+	// Utilise l'API Web Speech
+
+	let PROMPT;  // Zone de texte où écrire le résultat
+	let SR;      // Objet SpeechRecognition
+
+	PROMPT = document.getElementById("ai-prompt");
+	if(PROMPT == null)
+	{
+		return;
+	}
+
+	SR = GET_SPEECH_RECOGNITION();
+	if(SR == null)
+	{
+		AI_STATUS("Web Speech API non supportée sur ce navigateur.");
+		return;
+	}
+
+	AI_STATUS("Écoute... parle maintenant ");
+
+	// Callback quand la reconnaissance a un résultat
+	SR.onresult = function(EVENT)
+	{
+		let TEXT;
+
+		if(EVENT.results == null)
+		{
+			return;
+		}
+
+		if(EVENT.results[0] == null || EVENT.results[0][0] == null)
+		{
+			return;
+		}
+
+		// Récupère le texte reconnu
+		TEXT = EVENT.results[0][0].transcript;
+		TEXT = SIMPLE_TRIM(TEXT);
+
+		if(TEXT == "")
+		{
+			return;
+		}
+
+		// Met le texte dans la zone de prompt
+		PROMPT.value = TEXT;
+		AI_STATUS('Dictée OK Clique sur "Générer code".');
+	};
+
+	// Callback en cas d'erreur
+	SR.onerror = function(EVENT)
+	{
+		let MSG;
+
+		MSG = "inconnue";
+		if(EVENT != null && EVENT.error)
+		{
+			MSG = EVENT.error;
+		}
+
+		AI_STATUS("Erreur dictée : " + MSG);
+	};
+
+	// Lance l'écoute
+	SR.start();
+}
+
+function GET_SPEECH_RECOGNITION()
+{
+	// Crée et configure un objet SpeechRecognition
+	// Retourne null si le navigateur ne supporte pas
+
+	let SpeechRecognition;  // Constructeur (peut avoir un préfixe webkit)
+	let SR;                 // Instance
+
+	// Gère la compatibilité avec les anciens navigateurs
+	SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+	if(SpeechRecognition == null)
+	{
+		return null;
+	}
+
+	SR = new SpeechRecognition();
+	SR.lang = "fr-FR";         // Langue française
+	SR.interimResults = false; // Pas de résultats intermédiaires
+	SR.maxAlternatives = 1;    // Une seule alternative
+
+	return SR;
+}
+
+async function GENERATE_PYTHON_FROM_PROMPT()
+{
+	// Fonction principale de génération de code Python par IA
+	// Envoie la demande à OpenRouter et met le code dans l'éditeur
+
+	let KEY;        // Clé API
+	let PROMPT;     // Zone de texte avec la demande
+	let EDITOR;     // Zone de code
+	let USER_TEXT;  // Texte de la demande utilisateur
+	let CODE;       // Code généré par l'IA
+
+	KEY = GET_AI_KEY();
+	if(KEY == null || KEY == "")
+	{
+		AI_STATUS('Ajoute d\'abord la clé API (bouton "Clé API").');
+		return;
+	}
+
+	PROMPT = document.getElementById("ai-prompt");
+	EDITOR = document.getElementById("editor");
+
+	if(PROMPT == null || EDITOR == null)
+	{
+		return;
+	}
+
+	USER_TEXT = SIMPLE_TRIM(PROMPT.value);
+
+	if(USER_TEXT == "")
+	{
+		AI_STATUS("Écris ou dicte une demande avant de générer.");
+		return;
+	}
+
+	AI_STATUS("Génération en cours via OpenRouter...");
+
+	try
+	{
+		// Appelle l'API OpenRouter
+		CODE = await CALL_OPENROUTER(KEY, USER_TEXT);
+
+		// Nettoie le code reçu (enlève les backticks markdown etc.)
+		CODE = SANITIZE_PYTHON_CODE(CODE);
+
+		if(CODE == null || CODE == "")
+		{
+			AI_STATUS("L'IA n'a pas renvoyé de code exploitable.");
+			return;
+		}
+
+		// Met le code généré dans l'éditeur
+		EDITOR.value = CODE;
+		EDITOR.dataset.filename = "ai_generated.py";
+
+		if(term != null)
+		{
+			term.writeln("[IA] Code généré via OpenRouter ");
+			printPrompt();
+		}
+
+		AI_STATUS("OK  Code injecté dans l'éditeur.");
+	}
+	catch(ERR)
+	{
+		// Affiche l'erreur
+		AI_STATUS("Erreur IA : " + String(ERR));
+
+		if(term != null)
+		{
+			term.writeln("[IA ERROR] " + String(ERR));
+			printPrompt();
+		}
+	}
+}
+
+async function CALL_OPENROUTER(KEY, USER_TEXT)
+{
+	// Fait l'appel HTTP à l'API OpenRouter pour générer du code
+	// Retourne le code Python généré
+
+	let SYSTEM_PROMPT;  // Instructions système pour l'IA
+	let BODY;           // Corps de la requête JSON
+	let RES;            // Réponse HTTP
+	let TXT;            // Texte de la réponse (en cas d'erreur)
+	let DATA;           // Données JSON de la réponse
+
+	// Prompt système qui explique à l'IA ce qu'on attend
+	SYSTEM_PROMPT =
+		"Tu es un générateur de code Python. " +
+		"Retourne UNIQUEMENT du code Python, sans markdown, sans backticks, sans explication. " +
+		"Le code doit être exécutable tel quel. " +
+		"Si c'est interactif, utilise input()." +
+		"Ne définis aucune fonction (pas de def). Écris un script linéaire (top-level) uniquement.";
+
+	// Construit le corps de la requête
+	BODY = {};
+	BODY.model = "mistralai/devstral-2512:free";  // Modèle gratuit de Mistral
+	BODY.messages =
+	[
+		{ role: "system", content: SYSTEM_PROMPT },  // Instructions pour l'IA
+		{ role: "user", content: USER_TEXT }          // Demande de l'utilisateur
+	];
+	BODY.temperature = 0.2;  // Température basse = réponses plus déterministes
+
+	// Log pour debug
+	console.log("JSON ENVOYÉ À L'API :", BODY);
+
+	// Envoie la requête POST à OpenRouter
+	RES = await fetch(OR_ENDPOINT,
+	{
+		method: "POST",
+		headers:
+		{
+			"Content-Type": "application/json",
+			"Authorization": "Bearer " + KEY,  // Authentification avec la clé API
+			"HTTP-Referer": window.location.origin,  // Requis par OpenRouter
+			"X-Title": "RTermLab"  // Nom de l'app pour les stats OpenRouter
+		},
+		body: JSON.stringify(BODY)
+	});
+
+	// Vérifie si la requête a réussi
+	if(RES.ok == false)
+	{
+		TXT = await RES.text();
+		throw new Error("HTTP " + RES.status + " - " + TXT);
+	}
+
+	// Parse la réponse JSON
+	DATA = await RES.json();
+
+	// Log pour debug
+	console.log("JSON REÇU DE L'API :", DATA);
+
+	// Extrait le code de la réponse
+	if(DATA.choices && DATA.choices[0] && DATA.choices[0].message)
+	{
+		return DATA.choices[0].message.content;
+	}
+
+	// Gère les erreurs retournées par l'API
+	if(DATA.error)
+	{
+		if(DATA.error.message)
+		{
+			throw new Error(DATA.error.message);
+		}
+		throw new Error(String(DATA.error));
+	}
+
+	throw new Error("Réponse JSON inattendue");
+}
+
+function SANITIZE_PYTHON_CODE(TEXT)
+{
+	// Nettoie le code Python reçu de l'IA
+	// Pour l'instant, juste une conversion en string
+	// On pourrait ajouter ici la suppression des ```python``` etc.
+
+	if(TEXT == null)
+	{
+		return "";
+	}
+
+	return String(TEXT);
+}
